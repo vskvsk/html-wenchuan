@@ -280,9 +280,40 @@ function getPAGMessageData(msg) {
   }
 }
 
-// 播放消息中的 PAG 动效（触碰或点击触发）
+// 记录已自动播放过的 PAG 消息
+const autoPlayedPAGMessages = new Set()
+
+// 记录正在播放中的 PAG 消息（用于节流控制）
+const playingPAGMessages = new Set()
+
+// 初始化消息中的 PAG 动效（首次加载时自动播放一次）
+async function initMessagePAG(msg, canvas) {
+  const msgId = msg.clientMsgID
+  
+  // 避免重复自动播放
+  if (autoPlayedPAGMessages.has(msgId)) return
+  autoPlayedPAGMessages.add(msgId)
+  
+  try {
+    const data = getPAGMessageData(msg)
+    if (!data || !data.effectUrl) return
+    
+    const pagFile = await loadPAGFile(data.effectUrl)
+    await playPAGOnCanvas(pagFile, canvas, {
+      repeatCount: 1 // 播放一次
+    })
+  } catch (error) {
+    console.error('❌ 自动播放消息 PAG 动效失败:', error)
+  }
+}
+
+// 播放消息中的 PAG 动效（触碰或点击触发，带节流控制）
 async function playMessagePAG(msg) {
   const msgId = msg.clientMsgID
+  
+  // 如果正在播放中，跳过
+  if (playingPAGMessages.has(msgId)) return
+  
   let canvas = messagePAGRefs.value[msgId]
   
   if (!canvas) {
@@ -292,6 +323,9 @@ async function playMessagePAG(msg) {
     canvas = foundCanvas
     messagePAGRefs.value[msgId] = canvas
   }
+  
+  // 标记为播放中
+  playingPAGMessages.add(msgId)
   
   try {
     const data = getPAGMessageData(msg)
@@ -304,6 +338,11 @@ async function playMessagePAG(msg) {
     })
   } catch (error) {
     console.error('❌ 播放消息 PAG 动效失败:', error)
+  } finally {
+    // 动画播放完成后移除标记（假设动画约1-2秒）
+    setTimeout(() => {
+      playingPAGMessages.delete(msgId)
+    }, 1500)
   }
 }
 
@@ -606,7 +645,13 @@ onMounted(() => {
                   title="触碰或点击播放动效"
                 >
                   <canvas
-                    :ref="el => { if (el) messagePAGRefs[msg.clientMsgID] = el }"
+                    :ref="el => { 
+                      if (el) {
+                        messagePAGRefs[msg.clientMsgID] = el
+                        // 首次挂载时自动播放
+                        initMessagePAG(msg, el)
+                      }
+                    }"
                     class="pag-message-canvas"
                     :data-effect-url="getPAGMessageData(msg)?.effectUrl"
                     :data-msg-id="msg.clientMsgID"
