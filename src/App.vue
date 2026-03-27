@@ -22,6 +22,7 @@ const messageListRef = ref(null)
 // PAG 动效
 const showPAGPanel = ref(false)
 const pagPreviewRefs = ref({}) // 存储每个动效的 canvas ref
+const messagePAGRefs = ref({}) // 存储消息中 PAG 的 canvas ref
 
 // 连接状态文本
 const connectionStatusText = computed(() => {
@@ -179,32 +180,61 @@ function formatTime(timestamp) {
 // 切换 PAG 面板
 function togglePAGPanel() {
   showPAGPanel.value = !showPAGPanel.value
-  // 打开面板后自动加载动效预览
-  if (showPAGPanel.value) {
-    nextTick(() => {
-      loadAllPAGPreviews()
+}
+
+// 播放单个动效预览（点击时触发）
+async function playPAGPreview(effect) {
+  const canvas = pagPreviewRefs.value[effect.id]
+  if (!canvas) return
+  
+  try {
+    const pagFile = await loadPAGFile(effect.url)
+    await playPAGOnCanvas(pagFile, canvas, {
+      repeatCount: 1 // 播放一次
     })
+  } catch (error) {
+    console.error(`❌ 播放动效 ${effect.name} 失败:`, error)
   }
 }
 
-// 加载所有动效预览
-async function loadAllPAGPreviews() {
-  for (const effect of pagEffects) {
-    const canvas = pagPreviewRefs.value[effect.id]
-    if (canvas) {
-      try {
-        const pagFile = await loadPAGFile(effect.url)
-        await playPAGOnCanvas(pagFile, canvas, {
-          repeatCount: 0 // 无限循环
-        })
-      } catch (error) {
-        console.error(`❌ 加载动效 ${effect.name} 预览失败:`, error)
-      }
-    }
+// 点击动效卡片：先播放一次，然后发送
+async function handlePAGCardClick(effect) {
+  const canvas = pagPreviewRefs.value[effect.id]
+  if (!canvas) return
+  
+  try {
+    // 播放一次动效
+    const pagFile = await loadPAGFile(effect.url)
+    const pagView = await playPAGOnCanvas(pagFile, canvas, {
+      repeatCount: 1 // 播放一次
+    })
+    
+    // 播放完成后发送
+    pagView.addListener('onAnimationEnd', async () => {
+      await sendPAG(effect)
+    })
+  } catch (error) {
+    console.error('❌ 播放动效失败:', error)
+    // 播放失败也尝试发送
+    await sendPAG(effect)
   }
 }
 
-// 发送 PAG 动效（点击直接发送）
+// 播放最新消息的 PAG 动效
+async function playLatestPAGMessage() {
+  await nextTick()
+  
+  // 找到最后一条 PAG 消息
+  const pagMessages = imStore.messages.filter(msg => isPAGMessage(msg))
+  if (pagMessages.length === 0) return
+  
+  const latestMsg = pagMessages[pagMessages.length - 1]
+  
+  // 使用统一的播放函数
+  await playMessagePAG(latestMsg)
+}
+
+// 发送 PAG 动效
 async function sendPAG(effect) {
   const target = currentChatTarget.value
   if (!target) {
@@ -220,8 +250,8 @@ async function sendPAG(effect) {
   if (result.success) {
     showPAGPanel.value = false
     scrollToBottom()
-    // 清空预览引用
-    pagPreviewRefs.value = {}
+    // 播放最新发送的 PAG 消息动效
+    await playLatestPAGMessage()
   } else {
     alert(`发送失败: ${result.errMsg}`)
   }
@@ -250,18 +280,24 @@ function getPAGMessageData(msg) {
   }
 }
 
-// 初始化消息中的 PAG 动效（每个消息只播放一次）
-const playedMessagePAGs = new Set()
-
-async function initMessagePAG(msg, canvas) {
+// 播放消息中的 PAG 动效（触碰或点击触发）
+async function playMessagePAG(msg) {
   const msgId = msg.clientMsgID
-  if (playedMessagePAGs.has(msgId)) return
+  let canvas = messagePAGRefs.value[msgId]
+  
+  if (!canvas) {
+    // 如果 ref 还没准备好，尝试从 DOM 查找
+    const foundCanvas = document.querySelector(`canvas[data-msg-id="${msgId}"]`)
+    if (!foundCanvas) return
+    canvas = foundCanvas
+    messagePAGRefs.value[msgId] = canvas
+  }
   
   try {
     const data = getPAGMessageData(msg)
     if (!data || !data.effectUrl) return
     
-    playedMessagePAGs.add(msgId)
+    // 播放动效（PAG 会自动处理 canvas，不需要手动清空）
     const pagFile = await loadPAGFile(data.effectUrl)
     await playPAGOnCanvas(pagFile, canvas, {
       repeatCount: 1 // 播放一次
@@ -563,11 +599,19 @@ onMounted(() => {
               </template>
               <!-- PAG 动效消息 -->
               <template v-else-if="isPAGMessage(msg)">
-                <div class="pag-message-container">
+                <div 
+                  class="pag-message-container" 
+                  @mouseenter="playMessagePAG(msg)"
+                  @click="playMessagePAG(msg)" 
+                  title="触碰或点击播放动效"
+                >
                   <canvas
-                    :ref="el => { if (el) initMessagePAG(msg, el) }"
+                    :ref="el => { if (el) messagePAGRefs[msg.clientMsgID] = el }"
                     class="pag-message-canvas"
                     :data-effect-url="getPAGMessageData(msg)?.effectUrl"
+                    :data-msg-id="msg.clientMsgID"
+                    width="120"
+                    height="120"
                   ></canvas>
                 </div>
               </template>
@@ -604,8 +648,9 @@ onMounted(() => {
                 v-for="effect in pagEffects"
                 :key="effect.id"
                 class="pag-effect-card"
-                @click="sendPAG(effect)"
-                :title="`点击发送「${effect.name}」`"
+                @mouseenter="playPAGPreview(effect)"
+                @click="handlePAGCardClick(effect)"
+                :title="`触碰预览，点击发送「${effect.name}」`"
               >
                 <canvas
                   :ref="el => { if (el) pagPreviewRefs[effect.id] = el }"

@@ -61,9 +61,13 @@ export async function loadPAGFile(url) {
 export async function playPAGOnCanvas(pagFile, canvas, options = {}) {
   const pag = getPAG()
   
-  // 设置 Canvas 尺寸
-  canvas.width = pagFile.width()
-  canvas.height = pagFile.height()
+  // 保存原始显示尺寸
+  const displayWidth = canvas.clientWidth || 120
+  const displayHeight = canvas.clientHeight || 120
+  
+  // 重置 Canvas 以清除任何现有上下文
+  canvas.width = displayWidth
+  canvas.height = displayHeight
   
   // 创建 PAGView
   const pagView = await pag.PAGView.init(pagFile, canvas, options)
