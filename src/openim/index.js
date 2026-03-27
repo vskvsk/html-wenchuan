@@ -55,9 +55,9 @@ export function createTextMessage(text) {
 }
 
 // 创建自定义消息
-export function createCustomMessage(data, extension, description) {
+export function createCustomMessage(params) {
   const sdk = getIMSDK()
-  return sdk.createCustomMessage(data, extension, description)
+  return sdk.createCustomMessage(params)
 }
 
 // 发送消息

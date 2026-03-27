@@ -269,11 +269,11 @@ export const useIMStore = defineStore('im', () => {
       })
       
       // 创建自定义消息
-      const { data: message } = await createCustomMessage(
-        customData,
-        '', // extension
-        '[PAG动效]' // description
-      )
+      const { data: message } = await createCustomMessage({
+        data: customData,
+        extension: '',
+        description: '[PAG动效]'
+      })
       
       const result = await imSendMessage({
         recvID,
