@@ -512,7 +512,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: rgb(2, 137, 250);
 }
 
 .login-box {
@@ -554,13 +554,13 @@ body {
 
 .form-group input:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: rgb(2, 137, 250);
 }
 
 .login-btn {
   width: 100%;
   padding: 14px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: rgb(2, 137, 250);
   color: white;
   border: none;
   border-radius: 8px;
@@ -574,7 +574,7 @@ body {
 
 .login-btn:hover {
   transform: translateY(-2px);
-  box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+  box-shadow: 0 5px 20px rgba(2, 137, 250, 0.4);
 }
 
 .tips {
@@ -620,7 +620,7 @@ body {
   width: 40px;
   height: 40px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: rgb(2, 137, 250);
   color: white;
   display: flex;
   align-items: center;
@@ -653,7 +653,7 @@ body {
 }
 
 .nav-btn.active {
-  color: #1976d2;
+  color: rgb(2, 137, 250);
 }
 
 .nav-icon {
@@ -735,7 +735,7 @@ body {
 }
 
 .contact-category.active {
-  background: #e3f2fd;
+  background: rgba(2, 137, 250, 0.1);
 }
 
 .category-icon {
@@ -755,7 +755,7 @@ body {
 }
 
 .category-icon.blue {
-  background: #2196f3;
+  background: rgb(2, 137, 250);
   color: white;
 }
 
@@ -793,14 +793,14 @@ body {
 }
 
 .conversation-item.active {
-  background: #e3f2fd;
+  background: rgba(2, 137, 250, 0.1);
 }
 
 .conv-avatar {
   width: 44px;
   height: 44px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: rgb(2, 137, 250);
   color: white;
   display: flex;
   align-items: center;
@@ -867,14 +867,14 @@ body {
 }
 
 .friend-item.active {
-  background: #e3f2fd;
+  background: rgba(2, 137, 250, 0.1);
 }
 
 .friend-avatar {
   width: 44px;
   height: 44px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #42a5f5 0%, #1976d2 100%);
+  background: rgb(2, 137, 250);
   color: white;
   display: flex;
   align-items: center;
@@ -916,7 +916,7 @@ body {
   width: 44px;
   height: 44px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: rgb(2, 137, 250);
   color: white;
   display: flex;
   align-items: center;
@@ -1096,7 +1096,7 @@ body {
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: rgb(2, 137, 250);
   color: white;
   display: flex;
   align-items: center;
@@ -1131,7 +1131,7 @@ body {
 }
 
 .message-item.self .msg-bubble {
-  background: #667eea;
+  background: rgb(2, 137, 250);
   color: white;
 }
 
@@ -1173,12 +1173,12 @@ body {
 
 .input-area textarea:focus {
   outline: none;
-  border-color: #667eea;
+  border-color: rgb(2, 137, 250);
 }
 
 .send-btn {
   padding: 0 24px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: rgb(2, 137, 250);
   color: white;
   border: none;
   border-radius: 8px;
