@@ -7,6 +7,7 @@ import {
   logout as imLogout,
   getLoginStatus,
   createTextMessage,
+  createCustomMessage,
   sendMessage as imSendMessage,
   getAllConversationList,
   getAdvancedHistoryMessageList,
@@ -20,6 +21,7 @@ import {
   onEvent,
   offEvent
 } from '@/openim'
+import { initPAG } from '@/pag'
 
 export const useIMStore = defineStore('im', () => {
   // State
@@ -54,11 +56,13 @@ export const useIMStore = defineStore('im', () => {
   })
 
   // Actions
-  function initialize() {
+  async function initialize() {
     if (isInitialized.value) return
 
     try {
       initSDK()
+      // 初始化 PAG
+      await initPAG()
       isInitialized.value = true
       setupEventListeners()
     } catch (error) {
@@ -252,6 +256,46 @@ export const useIMStore = defineStore('im', () => {
     }
   }
 
+  async function sendPAGMessage(effectId, effectUrl, recvID, groupID = '') {
+    try {
+      console.log('🎬 发送 PAG 动效消息:', { effectId, effectUrl })
+      
+      // 创建自定义消息数据
+      const customData = JSON.stringify({
+        type: 'pag_effect',
+        effectId,
+        effectUrl,
+        timestamp: Date.now()
+      })
+      
+      // 创建自定义消息
+      const { data: message } = await createCustomMessage(
+        customData,
+        '', // extension
+        '[PAG动效]' // description
+      )
+      
+      const result = await imSendMessage({
+        recvID,
+        groupID,
+        message
+      })
+      
+      // 添加本地消息到列表
+      if (result.data) {
+        messages.value.push(result.data)
+      }
+      
+      // 刷新会话列表
+      await loadConversations()
+      console.log('✅ PAG 动效消息发送成功')
+      return { success: true, data: result.data }
+    } catch ({ errCode, errMsg }) {
+      console.error('🚫 PAG 动效消息发送失败', errCode, errMsg)
+      return { success: false, errCode, errMsg }
+    }
+  }
+
   function selectFriend(friend) {
     currentFriendID.value = friend?.friendUser?.userID || ''
     currentGroupID.value = ''
@@ -416,6 +460,7 @@ export const useIMStore = defineStore('im', () => {
     loadGroupNotices,
     loadMessages,
     sendTextMessage,
+    sendPAGMessage,
     selectConversation,
     selectFriend,
     selectGroup,

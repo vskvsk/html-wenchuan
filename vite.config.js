@@ -15,4 +15,14 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
+  server: {
+    headers: {
+      // 确保 WASM 文件使用正确的 MIME 类型
+      '*.wasm': 'application/wasm'
+    }
+  },
+  // 优化依赖
+  optimizeDeps: {
+    exclude: ['libpag']
+  }
 })

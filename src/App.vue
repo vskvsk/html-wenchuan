@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { useIMStore } from '@/stores/im'
+import { pagEffects, loadPAGFile, playPAGOnCanvas } from '@/pag'
 
 const imStore = useIMStore()
 
@@ -17,6 +18,12 @@ const loginForm = ref({
 // 消息输入
 const messageInput = ref('')
 const messageListRef = ref(null)
+
+// PAG 动效
+const showPAGPanel = ref(false)
+const pagCanvasRef = ref(null)
+const currentPAGView = ref(null)
+const previewEffect = ref(null)
 
 // 连接状态文本
 const connectionStatusText = computed(() => {
@@ -169,6 +176,106 @@ function formatTime(timestamp) {
   if (!timestamp) return ''
   const date = new Date(timestamp)
   return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
+// 切换 PAG 面板
+function togglePAGPanel() {
+  showPAGPanel.value = !showPAGPanel.value
+}
+
+// 预览 PAG 动效
+async function previewPAG(effect) {
+  try {
+    previewEffect.value = effect
+    
+    // 停止之前的预览
+    if (currentPAGView.value) {
+      await currentPAGView.value.stop()
+      currentPAGView.value = null
+    }
+    
+    // 等待 DOM 更新
+    await nextTick()
+    
+    if (!pagCanvasRef.value) return
+    
+    // 加载并播放 PAG 文件
+    const pagFile = await loadPAGFile(effect.url)
+    const pagView = await playPAGOnCanvas(pagFile, pagCanvasRef.value, {
+      repeatCount: 0 // 无限循环
+    })
+    
+    currentPAGView.value = pagView
+  } catch (error) {
+    console.error('❌ PAG 预览失败:', error)
+  }
+}
+
+// 发送 PAG 动效
+async function sendPAG(effect) {
+  const target = currentChatTarget.value
+  if (!target) {
+    alert('请先选择一个会话或好友')
+    return
+  }
+  
+  const recvID = target.isGroup ? '' : target.id
+  const groupID = target.isGroup ? target.id : ''
+  
+  const result = await imStore.sendPAGMessage(effect.id, effect.url, recvID, groupID)
+  
+  if (result.success) {
+    showPAGPanel.value = false
+    // 停止预览
+    if (currentPAGView.value) {
+      await currentPAGView.value.stop()
+      currentPAGView.value = null
+    }
+    previewEffect.value = null
+    scrollToBottom()
+  } else {
+    alert(`发送失败: ${result.errMsg}`)
+  }
+}
+
+// 检查消息是否是 PAG 动效
+function isPAGMessage(msg) {
+  try {
+    const content = msg.customElem?.data || msg.customElem?.extension
+    if (!content) return false
+    const data = JSON.parse(content)
+    return data.type === 'pag_effect'
+  } catch {
+    return false
+  }
+}
+
+// 获取 PAG 消息数据
+function getPAGMessageData(msg) {
+  try {
+    const content = msg.customElem?.data || msg.customElem?.extension
+    if (!content) return null
+    return JSON.parse(content)
+  } catch {
+    return null
+  }
+}
+
+// 播放消息中的 PAG 动效
+async function playMessagePAG(msg, canvasRef) {
+  try {
+    const data = getPAGMessageData(msg)
+    if (!data || !data.effectUrl) return
+    
+    const pagFile = await loadPAGFile(data.effectUrl)
+    const pagView = await playPAGOnCanvas(pagFile, canvasRef, {
+      repeatCount: 1 // 播放一次
+    })
+    
+    return pagView
+  } catch (error) {
+    console.error('❌ 播放消息 PAG 动效失败:', error)
+  }
 }
 
 // 获取头像显示文字（最多5个字，优先昵称）
@@ -456,7 +563,22 @@ onMounted(() => {
             </div>
             <div class="msg-content">
               <div class="msg-sender">{{ msg.senderNickname || msg.sendID }}</div>
-              <div class="msg-bubble">{{ msg.textElem?.content || '[不支持的消息类型]' }}</div>
+              <div class="msg-bubble">
+              <!-- 文本消息 -->
+              <template v-if="msg.textElem?.content">
+                {{ msg.textElem.content }}
+              </template>
+              <!-- PAG 动效消息 -->
+              <template v-else-if="isPAGMessage(msg)">
+                <div class="pag-message">
+                  <span class="pag-label">🎬 {{ getPAGMessageData(msg)?.effectId }}</span>
+                </div>
+              </template>
+              <!-- 其他消息 -->
+              <template v-else>
+                [不支持的消息类型]
+              </template>
+            </div>
               <div class="msg-time">{{ formatTime(msg.createTime) }}</div>
             </div>
           </div>
@@ -466,19 +588,59 @@ onMounted(() => {
         </div>
 
         <div class="input-area">
-          <textarea
-            v-model="messageInput"
-            :placeholder="currentChatTarget ? '输入消息，按 Enter 发送...' : '请先选择好友或会话'"
-            @keydown="handleKeydown"
-            :disabled="!currentChatTarget"
-          ></textarea>
-          <button
-            class="send-btn"
-            @click="handleSendMessage"
-            :disabled="!canSendMessage"
-          >
-            发送
-          </button>
+          <div class="input-toolbar">
+            <button
+              class="toolbar-btn"
+              :class="{ active: showPAGPanel }"
+              @click="togglePAGPanel"
+              title="发送动效"
+              :disabled="!currentChatTarget"
+            >
+              🎬 动效
+            </button>
+          </div>
+
+          <!-- PAG 动效选择面板 -->
+          <div v-if="showPAGPanel" class="pag-panel">
+            <div class="pag-effects">
+              <div
+                v-for="effect in pagEffects"
+                :key="effect.id"
+                class="pag-effect-item"
+                :class="{ active: previewEffect?.id === effect.id }"
+                @click="previewPAG(effect)"
+              >
+                <span class="pag-effect-icon">{{ effect.thumbnail }}</span>
+                <span class="pag-effect-name">{{ effect.name }}</span>
+              </div>
+            </div>
+            <div class="pag-preview">
+              <canvas ref="pagCanvasRef" class="pag-canvas"></canvas>
+              <button
+                v-if="previewEffect"
+                class="pag-send-btn"
+                @click="sendPAG(previewEffect)"
+              >
+                发送「{{ previewEffect.name }}」
+              </button>
+            </div>
+          </div>
+
+          <div class="input-row">
+            <textarea
+              v-model="messageInput"
+              :placeholder="currentChatTarget ? '输入消息，按 Enter 发送...' : '请先选择好友或会话'"
+              @keydown="handleKeydown"
+              :disabled="!currentChatTarget"
+            ></textarea>
+            <button
+              class="send-btn"
+              @click="handleSendMessage"
+              :disabled="!canSendMessage"
+            >
+              发送
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1153,14 +1315,129 @@ body {
 
 /* 输入区域 */
 .input-area {
-  padding: 16px 24px;
+  padding: 12px 24px;
   background: white;
   border-top: 1px solid #e0e0e0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.input-toolbar {
+  display: flex;
+  gap: 8px;
+}
+
+.toolbar-btn {
+  padding: 6px 12px;
+  background: #f5f5f5;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.toolbar-btn:hover {
+  background: #e8e8e8;
+}
+
+.toolbar-btn.active {
+  background: rgba(2, 137, 250, 0.1);
+  border-color: rgb(2, 137, 250);
+  color: rgb(2, 137, 250);
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* PAG 动效面板 */
+.pag-panel {
+  display: flex;
+  gap: 16px;
+  padding: 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.pag-effects {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  max-width: 300px;
+}
+
+.pag-effect-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 12px;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 60px;
+}
+
+.pag-effect-item:hover {
+  background: #f0f0f0;
+  border-color: rgb(2, 137, 250);
+}
+
+.pag-effect-item.active {
+  background: rgba(2, 137, 250, 0.1);
+  border-color: rgb(2, 137, 250);
+}
+
+.pag-effect-icon {
+  font-size: 24px;
+  margin-bottom: 4px;
+}
+
+.pag-effect-name {
+  font-size: 12px;
+  color: #666;
+}
+
+.pag-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.pag-canvas {
+  width: 150px;
+  height: 150px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e0e0e0;
+}
+
+.pag-send-btn {
+  padding: 8px 16px;
+  background: rgb(2, 137, 250);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.pag-send-btn:hover {
+  opacity: 0.9;
+}
+
+.input-row {
   display: flex;
   gap: 12px;
 }
 
-.input-area textarea {
+.input-row textarea {
   flex: 1;
   padding: 12px 16px;
   border: 1px solid #ddd;
@@ -1171,9 +1448,24 @@ body {
   height: 60px;
 }
 
-.input-area textarea:focus {
+.input-row textarea:focus {
   outline: none;
   border-color: rgb(2, 137, 250);
+}
+
+/* PAG 消息样式 */
+.pag-message {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pag-label {
+  background: rgba(2, 137, 250, 0.1);
+  color: rgb(2, 137, 250);
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 13px;
 }
 
 .send-btn {
