@@ -21,9 +21,7 @@ const messageListRef = ref(null)
 
 // PAG 动效
 const showPAGPanel = ref(false)
-const pagCanvasRef = ref(null)
-const currentPAGView = ref(null)
-const previewEffect = ref(null)
+const pagPreviewRefs = ref({}) // 存储每个动效的 canvas ref
 
 // 连接状态文本
 const connectionStatusText = computed(() => {
@@ -181,37 +179,32 @@ function formatTime(timestamp) {
 // 切换 PAG 面板
 function togglePAGPanel() {
   showPAGPanel.value = !showPAGPanel.value
-}
-
-// 预览 PAG 动效
-async function previewPAG(effect) {
-  try {
-    previewEffect.value = effect
-    
-    // 停止之前的预览
-    if (currentPAGView.value) {
-      await currentPAGView.value.stop()
-      currentPAGView.value = null
-    }
-    
-    // 等待 DOM 更新
-    await nextTick()
-    
-    if (!pagCanvasRef.value) return
-    
-    // 加载并播放 PAG 文件
-    const pagFile = await loadPAGFile(effect.url)
-    const pagView = await playPAGOnCanvas(pagFile, pagCanvasRef.value, {
-      repeatCount: 0 // 无限循环
+  // 打开面板后自动加载动效预览
+  if (showPAGPanel.value) {
+    nextTick(() => {
+      loadAllPAGPreviews()
     })
-    
-    currentPAGView.value = pagView
-  } catch (error) {
-    console.error('❌ PAG 预览失败:', error)
   }
 }
 
-// 发送 PAG 动效
+// 加载所有动效预览
+async function loadAllPAGPreviews() {
+  for (const effect of pagEffects) {
+    const canvas = pagPreviewRefs.value[effect.id]
+    if (canvas) {
+      try {
+        const pagFile = await loadPAGFile(effect.url)
+        await playPAGOnCanvas(pagFile, canvas, {
+          repeatCount: 0 // 无限循环
+        })
+      } catch (error) {
+        console.error(`❌ 加载动效 ${effect.name} 预览失败:`, error)
+      }
+    }
+  }
+}
+
+// 发送 PAG 动效（点击直接发送）
 async function sendPAG(effect) {
   const target = currentChatTarget.value
   if (!target) {
@@ -226,13 +219,9 @@ async function sendPAG(effect) {
   
   if (result.success) {
     showPAGPanel.value = false
-    // 停止预览
-    if (currentPAGView.value) {
-      await currentPAGView.value.stop()
-      currentPAGView.value = null
-    }
-    previewEffect.value = null
     scrollToBottom()
+    // 清空预览引用
+    pagPreviewRefs.value = {}
   } else {
     alert(`发送失败: ${result.errMsg}`)
   }
@@ -261,18 +250,22 @@ function getPAGMessageData(msg) {
   }
 }
 
-// 播放消息中的 PAG 动效
-async function playMessagePAG(msg, canvasRef) {
+// 初始化消息中的 PAG 动效（每个消息只播放一次）
+const playedMessagePAGs = new Set()
+
+async function initMessagePAG(msg, canvas) {
+  const msgId = msg.clientMsgID
+  if (playedMessagePAGs.has(msgId)) return
+  
   try {
     const data = getPAGMessageData(msg)
     if (!data || !data.effectUrl) return
     
+    playedMessagePAGs.add(msgId)
     const pagFile = await loadPAGFile(data.effectUrl)
-    const pagView = await playPAGOnCanvas(pagFile, canvasRef, {
+    await playPAGOnCanvas(pagFile, canvas, {
       repeatCount: 1 // 播放一次
     })
-    
-    return pagView
   } catch (error) {
     console.error('❌ 播放消息 PAG 动效失败:', error)
   }
@@ -570,8 +563,12 @@ onMounted(() => {
               </template>
               <!-- PAG 动效消息 -->
               <template v-else-if="isPAGMessage(msg)">
-                <div class="pag-message">
-                  <span class="pag-label">🎬 {{ getPAGMessageData(msg)?.effectId }}</span>
+                <div class="pag-message-container">
+                  <canvas
+                    :ref="el => { if (el) initMessagePAG(msg, el) }"
+                    class="pag-message-canvas"
+                    :data-effect-url="getPAGMessageData(msg)?.effectUrl"
+                  ></canvas>
                 </div>
               </template>
               <!-- 其他消息 -->
@@ -602,27 +599,20 @@ onMounted(() => {
 
           <!-- PAG 动效选择面板 -->
           <div v-if="showPAGPanel" class="pag-panel">
-            <div class="pag-effects">
+            <div class="pag-effects-grid">
               <div
                 v-for="effect in pagEffects"
                 :key="effect.id"
-                class="pag-effect-item"
-                :class="{ active: previewEffect?.id === effect.id }"
-                @click="previewPAG(effect)"
+                class="pag-effect-card"
+                @click="sendPAG(effect)"
+                :title="`点击发送「${effect.name}」`"
               >
-                <span class="pag-effect-icon">{{ effect.thumbnail }}</span>
+                <canvas
+                  :ref="el => { if (el) pagPreviewRefs[effect.id] = el }"
+                  class="pag-preview-canvas"
+                ></canvas>
                 <span class="pag-effect-name">{{ effect.name }}</span>
               </div>
-            </div>
-            <div class="pag-preview">
-              <canvas ref="pagCanvasRef" class="pag-canvas"></canvas>
-              <button
-                v-if="previewEffect"
-                class="pag-send-btn"
-                @click="sendPAG(previewEffect)"
-              >
-                发送「{{ previewEffect.name }}」
-              </button>
             </div>
           </div>
 
@@ -1355,81 +1345,59 @@ body {
 
 /* PAG 动效面板 */
 .pag-panel {
-  display: flex;
-  gap: 16px;
   padding: 12px;
   background: #f8f9fa;
   border-radius: 8px;
   border: 1px solid #e0e0e0;
 }
 
-.pag-effects {
+.pag-effects-grid {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  max-width: 300px;
+  gap: 12px;
 }
 
-.pag-effect-item {
+.pag-effect-card {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 8px 12px;
+  padding: 8px;
   background: white;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s;
-  min-width: 60px;
+  width: 100px;
 }
 
-.pag-effect-item:hover {
-  background: #f0f0f0;
+.pag-effect-card:hover {
   border-color: rgb(2, 137, 250);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(2, 137, 250, 0.2);
 }
 
-.pag-effect-item.active {
-  background: rgba(2, 137, 250, 0.1);
-  border-color: rgb(2, 137, 250);
+.pag-preview-canvas {
+  width: 80px;
+  height: 80px;
+  border-radius: 8px;
 }
 
-.pag-effect-icon {
-  font-size: 24px;
-  margin-bottom: 4px;
-}
-
-.pag-effect-name {
+.pag-effect-card .pag-effect-name {
   font-size: 12px;
   color: #666;
+  margin-top: 4px;
 }
 
-.pag-preview {
+/* PAG 消息样式 */
+.pag-message-container {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
 }
 
-.pag-canvas {
-  width: 150px;
-  height: 150px;
-  background: white;
-  border-radius: 8px;
-  border: 1px solid #e0e0e0;
-}
-
-.pag-send-btn {
-  padding: 8px 16px;
-  background: rgb(2, 137, 250);
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.pag-send-btn:hover {
-  opacity: 0.9;
+.pag-message-canvas {
+  width: 120px;
+  height: 120px;
 }
 
 .input-row {
@@ -1453,20 +1421,7 @@ body {
   border-color: rgb(2, 137, 250);
 }
 
-/* PAG 消息样式 */
-.pag-message {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
 
-.pag-label {
-  background: rgba(2, 137, 250, 0.1);
-  color: rgb(2, 137, 250);
-  padding: 4px 12px;
-  border-radius: 16px;
-  font-size: 13px;
-}
 
 .send-btn {
   padding: 0 24px;
