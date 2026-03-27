@@ -84,6 +84,18 @@ export function getFriendList(filterBlack = false) {
   return sdk.getFriendList(filterBlack)
 }
 
+// 获取用户信息
+export function getUsersInfo(userIDList) {
+  const sdk = getIMSDK()
+  return sdk.getUsersInfo(userIDList)
+}
+
+// 获取自己的信息
+export function getSelfUserInfo() {
+  const sdk = getIMSDK()
+  return sdk.getSelfUserInfo()
+}
+
 // 获取加入的群组列表
 export function getJoinedGroupList() {
   const sdk = getIMSDK()

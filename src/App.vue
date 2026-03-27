@@ -171,6 +171,40 @@ function formatTime(timestamp) {
   return date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
+// 获取头像显示文字（最多5个字，优先昵称）
+function getAvatarText() {
+  const user = imStore.currentUser
+  if (!user) return '?'
+  // 优先使用昵称，其次用户ID
+  const text = user.nickname || user.userID || '?'
+  // 取前5个字符
+  return text.slice(0, 5)
+}
+
+// 获取会话头像显示文字
+function getConversationAvatarText(conv) {
+  // 优先使用showName（通常是昵称），其次userID
+  const text = conv.showName || conv.userID || '?'
+  // 取前5个字符
+  return text.slice(0, 5)
+}
+
+// 获取好友头像显示文字
+function getFriendAvatarText(friend) {
+  // 优先使用昵称，其次用户ID
+  const text = friend.friendUser?.nickname || friend.friendUser?.userID || '?'
+  // 取前5个字符
+  return text.slice(0, 5)
+}
+
+// 获取消息头像显示文字
+function getMessageAvatarText(msg) {
+  // 优先使用发送者昵称，其次发送者ID
+  const text = msg.senderNickname || msg.sendID || '?'
+  // 取前5个字符
+  return text.slice(0, 5)
+}
+
 onMounted(() => {
   // 自动填充演示账号（可选）
   loginForm.value.userID = '6465432554'
@@ -225,8 +259,8 @@ onMounted(() => {
       <div class="left-layout">
         <!-- 窄边栏 -->
         <div class="narrow-sidebar">
-          <div class="user-avatar">
-            {{ imStore.currentUser?.userID?.charAt(0)?.toUpperCase() || '?' }}
+          <div class="user-avatar" :title="imStore.currentUser?.nickname || imStore.currentUser?.userID">
+            {{ getAvatarText() }}
           </div>
           <div class="nav-buttons">
             <div
@@ -267,9 +301,9 @@ onMounted(() => {
                 :class="{ active: conv.conversationID === imStore.currentConversationID }"
                 @click="selectConversation(conv)"
               >
-                <div class="conv-avatar">
-                  {{ (conv.showName || conv.userID || '?').charAt(0).toUpperCase() }}
-                </div>
+              <div class="conv-avatar">
+                {{ getConversationAvatarText(conv) }}
+              </div>
                 <div class="conv-info">
                   <div class="conv-name">{{ conv.showName || conv.userID || '未知用户' }}</div>
                   <div class="conv-last-msg">
@@ -337,9 +371,9 @@ onMounted(() => {
                 :class="{ active: friend.friendUser?.userID === imStore.currentFriendID }"
                 @click="selectFriend(friend)"
               >
-                <div class="friend-avatar">
-                  {{ (friend.friendUser?.nickname || friend.friendUser?.userID || '?').charAt(0).toUpperCase() }}
-                </div>
+              <div class="friend-avatar">
+                {{ getFriendAvatarText(friend) }}
+              </div>
                 <div class="friend-info">
                   <div class="friend-name">{{ friend.friendUser?.nickname || friend.friendUser?.userID || '未知用户' }}</div>
                 </div>
@@ -368,7 +402,7 @@ onMounted(() => {
             <!-- 新的好友 -->
             <div v-else-if="imStore.contactSubTab === 'new'" class="friend-request-list">
               <div v-for="req in imStore.friendRequests" :key="req.userID" class="friend-request-item">
-                <div class="request-avatar">{{ req.nickname?.charAt(0) || '?' }}</div>
+                <div class="request-avatar">{{ (req.nickname || req.userID || '?').slice(0, 5) }}</div>
                 <div class="request-info">
                   <div class="request-name">{{ req.nickname || req.userID }}</div>
                   <div class="request-msg">{{ req.reqMsg || '请求添加好友' }}</div>
@@ -418,7 +452,7 @@ onMounted(() => {
             :class="{ self: msg.sendID === imStore.currentUser?.userID }"
           >
             <div class="msg-avatar">
-              {{ (msg.senderNickname || msg.sendID || '?').charAt(0).toUpperCase() }}
+              {{ getMessageAvatarText(msg) }}
             </div>
             <div class="msg-content">
               <div class="msg-sender">{{ msg.senderNickname || msg.sendID }}</div>

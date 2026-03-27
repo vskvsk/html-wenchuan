@@ -14,6 +14,8 @@ import {
   getJoinedGroupList,
   getFriendApplicationListAsRecipient,
   getGroupApplicationListAsRecipient,
+  getUsersInfo,
+  getSelfUserInfo,
   getIMSDK,
   onEvent,
   offEvent
@@ -75,9 +77,10 @@ export const useIMStore = defineStore('im', () => {
       connectionStatus.value = 'connected'
       console.log('✅ 连接成功')
       
-      // 连接成功后获取好友和会话列表
+      // 连接成功后获取用户信息和列表
       if (isLoggedIn.value) {
-        console.log('📋 正在获取好友和会话列表...')
+        console.log('📋 正在获取用户信息和列表...')
+        await loadSelfUserInfo()
         await Promise.all([loadFriends(), loadConversations()])
       }
     })
@@ -121,14 +124,45 @@ export const useIMStore = defineStore('im', () => {
       const result = await imLogin(params)
       console.log('🔑 登录成功:', result)
       isLoggedIn.value = true
+      // 先设置基本用户信息，连接成功后会获取详细信息
       currentUser.value = { userID: params.userID }
-      // 登录成功后等待连接成功事件触发，再获取列表
       return { success: true }
     } catch ({ errCode, errMsg }) {
       console.error('🚫 登录失败', errCode, errMsg)
       return { success: false, errCode, errMsg }
     }
   }
+
+  async function loadSelfUserInfo() {
+    try {
+      console.log('👤 正在获取自己的用户信息...')
+      const result = await getSelfUserInfo()
+      console.log('👤 自己的用户信息:', result)
+      
+      if (result?.data) {
+        // 更新当前用户信息，保留原有的 userID
+        currentUser.value = {
+          ...currentUser.value,
+          ...result.data
+        }
+        console.log('👤 当前用户更新为:', currentUser.value)
+      }
+    } catch (error) {
+      console.error('❌ 获取自己的用户信息失败:', error)
+    }
+  }
+
+  async function loadUsersInfo(userIDList) {
+    try {
+      console.log('👥 正在获取用户信息:', userIDList)
+      const result = await getUsersInfo(userIDList)
+      console.log('👥 用户信息:', result)
+      return result?.data || []
+    } catch (error) {
+      console.error('❌ 获取用户信息失败:', error)
+      return []
+    }
+    }
 
   async function logout() {
     try {
@@ -373,6 +407,8 @@ export const useIMStore = defineStore('im', () => {
     initialize,
     login,
     logout,
+    loadSelfUserInfo,
+    loadUsersInfo,
     loadConversations,
     loadFriends,
     loadGroups,
